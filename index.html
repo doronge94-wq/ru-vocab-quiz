@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="露単語クイズ">
+<title>露単語クイズ</title>
+<style>
+:root{font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif;color:#171717;background:#f5f5f7}
+*{box-sizing:border-box}body{margin:0}.wrap{max-width:680px;margin:auto;padding:18px}.top{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap}.brand{font-size:24px;font-weight:800}.stats{display:flex;gap:8px}.stat{background:#fff;border:1px solid #ddd;border-radius:12px;padding:7px 10px;font-size:12px}.stat b{font-size:16px;display:block}
+nav{display:flex;gap:8px;margin-bottom:12px;overflow:auto}nav button,.btn{border:1px solid #ddd;background:#fff;border-radius:12px;padding:11px 14px;font-weight:700;font-size:15px;min-height:44px}nav button.active,.primary{background:#171717;color:white;border-color:#171717}
+.card{background:#fff;border:1px solid #ddd;border-radius:22px;padding:22px}.muted{color:#777;font-size:13px}.word{font-size:clamp(38px,10vw,64px);font-weight:850;margin:25px 0 4px;word-break:break-word}.meaning{font-size:21px}.choices{display:grid;gap:9px;margin-top:20px}.choice{text-align:left;width:100%;min-height:52px}.choice.ok{background:#e7f6eb;border-color:#72b982}.choice.no{background:#fbe9e9;border-color:#d98989}.feedback{margin-top:15px;padding:14px;border-radius:14px;background:#f5f5f7;line-height:1.55}.hidden{display:none!important}
+label{display:block;font-size:13px;color:#777;margin:14px 0 6px}input,textarea{width:100%;border:1px solid #ccc;border-radius:12px;padding:12px;font-size:16px;background:#fff}textarea{min-height:90px}.full{width:100%;margin-top:16px}.item{padding:14px 0;border-bottom:1px solid #eee}.row{display:flex;justify-content:space-between;gap:10px;align-items:center}.smallbtn{min-height:40px!important;padding:8px 11px!important;font-size:13px!important}.empty{padding:25px 0;text-align:center;color:#777}
+
+.list-tools{display:flex;gap:8px;margin:12px 0;align-items:center}
+.list-tools input{flex:1}
+.word-row{display:flex;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid #333}
+.word-main{min-width:0}
+.word-actions{display:flex;gap:6px;align-items:center;flex-shrink:0}
+.edit-area{padding:12px;margin:10px 0;border:1px solid #555;border-radius:12px}
+.edit-area label{display:block;margin:8px 0}
+.edit-area input{width:100%;box-sizing:border-box}
+.danger{border-color:#a33}
+.hidden{display:none!important}
+</style>
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="64x64" href="favicon.png">
+</head>
+<body>
+<div class="wrap">
+<div class="top"><div class="brand">🇷🇺 露単語クイズ</div><button class="btn smallbtn" id="notifyBtn">🔔 1問通知</button><div class="stats"><div class="stat">登録<b id="count">0</b></div><div class="stat">正解率<b id="rate">—</b></div></div></div>
+<nav><button class="active" data-tab="quiz">クイズ</button><button data-tab="add">＋追加</button><button data-tab="list">単語一覧</button></nav>
+
+<section class="card page" id="quiz">
+<div class="row"><span class="muted">今日の1問</span><span class="muted" id="num">1問目</span></div>
+<div id="emptyQuiz" class="empty hidden">まだ単語がありません。<br>「＋追加」から登録しよう。</div>
+<div id="quizContent"><div class="word" id="qword"></div><div class="muted">日本語の意味は？</div><div class="choices" id="choices"></div><div class="feedback hidden" id="feedback"></div><button class="btn primary full hidden" id="next">次の問題</button></div>
+</section>
+<p class="muted" id="notifyStatus" style="margin:8px 4px"></p>
+
+<section class="card page hidden" id="add">
+<h2>新しい単語・表現</h2>
+<label>ロシア語</label><input id="ru" placeholder="например: обязательно">
+<label>日本語の意味</label><input id="ja" placeholder="必ず、ぜひ">
+<label>例文（任意）</label><textarea id="ex" placeholder="Я обязательно приду."></textarea>
+<label>メモ（任意）</label><input id="note" placeholder="使い方、格、ニュアンスなど">
+<button class="btn primary full" id="save">＋ 登録する</button><p class="muted" id="saved"></p>
+</section>
+
+<section class="card page hidden" id="list">
+<div class="list-tools">
+  <input id="searchInput" type="search" placeholder="🔎 ロシア語・日本語で検索">
+  <button class="btn smallbtn" id="searchBtn">検索</button>
+  <button class="btn smallbtn" id="clearSearchBtn">クリア</button>
+</div>
+<div id="editArea" class="edit-area hidden"></div>
+<div class="row"><h2>単語一覧 <span id="searchCount" class="muted"></span></h2><span class="muted" id="listCount"></span></div>
+<div id="items"></div>
+</section>
+</div>
+<script>
+(()=> {
+const KEY="ruQuizWordsV1", STAT="ruQuizStatsV1";
+let words=JSON.parse(localStorage.getItem(KEY)||"null");
+const importedWords=[{"ru":"Косарь","ja":"тысяча","ex":"","note":""},{"ru":"Надумывать/надумать","ja":"考えつく、する決心をする","ex":"","note":""},{"ru":"Шарит за что","ja":"то -знать что-то","ex":"","note":""},{"ru":"Чилловый","ja":"веселый","ex":"","note":""},{"ru":"Покидать/покинуть","ja":"見放す、見捨てる。立ち去る","ex":"","note":""},{"ru":"Продирать глаза","ja":"просыпаться","ex":"","note":""},{"ru":"Профицит←→дифицит","ja":"黒字・余剰 ←→ 赤字・不足","ex":"","note":""},{"ru":"На вершине","ja":"頂点に立つ","ex":"","note":""},{"ru":"Гонор","ja":"высокомерие","ex":"","note":""},{"ru":"С жиру беситься","ja":"わがままになる","ex":"","note":""},{"ru":"Основаться на чем","ja":"前にもとづく","ex":"","note":""},{"ru":"Втихаря","ja":"こっそりと","ex":"","note":""},{"ru":"Со зла","ja":"腹が立って","ex":"","note":""},{"ru":"Высрать","ja":"найти","ex":"","note":""},{"ru":"Обреченный","ja":"絶望的な","ex":"","note":""},{"ru":"Изалировать от чего","ja":"то- 独立させる","ex":"","note":""},{"ru":"Кобель","ja":"бабник","ex":"","note":""},{"ru":"Оклематься","ja":"正気を取り戻す。健康を回復する。","ex":"","note":""},{"ru":"Перделка","ja":"下位互換","ex":"","note":""},{"ru":"Попойка","ja":"酒盛り","ex":"","note":""},{"ru":"Тачка","ja":"машина","ex":"","note":""},{"ru":"Жеребец","ja":"здоровый мальчик","ex":"","note":""},{"ru":"Оргия","ja":"乱行パーティー","ex":"","note":""},{"ru":"Наслаждаться","ja":"造を楽しむ","ex":"","note":""},{"ru":"Кайфарик","ja":"кто кайфует","ex":"","note":""},{"ru":"Нарядный","ja":"красиво украшенный","ex":"","note":""},{"ru":"Пиздунятко","ja":"пиздум(врунюшка), но милопренебрежительный","ex":"","note":""},{"ru":"Насрать","ja":"похер","ex":"","note":""},{"ru":"Засрать","ja":"что-то гавно, кому-то не понравилось","ex":"","note":""},{"ru":"Красопеты","ja":"красоты","ex":"","note":""},{"ru":"Обосраться","ja":"испугаться","ex":"","note":""},{"ru":"Лимитка","ja":"期間限定商品","ex":"","note":""},{"ru":"Ознакамливаться","ja":"ознакомиться","ex":"","note":""},{"ru":"Прибыльный","ja":"利益の、もうかる","ex":"","note":""},{"ru":"Втюхивать/втюхать","ja":"売って儲ける","ex":"","note":""},{"ru":"Животворящий","ja":"тот кто дает силу жить","ex":"","note":""},{"ru":"Излишество","ja":"贅沢、必要以上の使用","ex":"","note":""},{"ru":"Яства","ja":"美味しい豊かな食べ物","ex":"","note":""},{"ru":"Недооценить","ja":"過小評価する","ex":"","note":""},{"ru":"Постный","ja":"味気のない、肉、乳製品のない","ex":"","note":""},{"ru":"Перебарщивать/Переборщить","ja":"度を越す","ex":"","note":""},{"ru":"Нахерачить","ja":"適当にパパッとつくる。","ex":"","note":""},{"ru":"Вдоль","ja":"параллельно","ex":"","note":""},{"ru":"Могнуть кого","ja":"то","ex":"","note":""},{"ru":"","ja":"превзайти по внешности","ex":"","note":""},{"ru":"Прокачать","ja":"улучшить","ex":"","note":""},{"ru":"Ужесточать/ужесточить","ja":"厳しくする","ex":"","note":""},{"ru":"Знойный","ja":"оч горячий","ex":"","note":""},{"ru":"Че нить намутим","ja":"что-нибудь сделаем/придумаем","ex":"","note":""},{"ru":"Поперек","ja":"перпендикулярно","ex":"","note":""},{"ru":"Дробить/раздробить","ja":"細かく砕く","ex":"","note":""},{"ru":"Дробленный","ja":"細かく砕かれた","ex":"","note":""},{"ru":"Спаливаться/спалиться","ja":"現行犯逮捕される。悪事がバレる。カンニングする。","ex":"","note":""},{"ru":"Раскраивать/раскроить","ja":"裁く、裁断する","ex":"","note":""},{"ru":"Прогнуться перед кем","ja":"то- продаваться","ex":"","note":""},{"ru":"Черкануть","ja":"написать","ex":"","note":""},{"ru":"Притон","ja":"место где собираются наркоманы и шлюхи","ex":"","note":""},{"ru":"Предназначать/предназначить","ja":"予定で決めておく、決められる。","ex":"","note":""},{"ru":"Предназначено","ja":"と決められてる。〜用である","ex":"","note":""},{"ru":"Угар","ja":"酒や薬などの快感や作用","ex":"","note":""},{"ru":"Клише","ja":"典型例、ポジティブ✖︎","ex":"","note":""},{"ru":"Поросенок петр","ja":"ロシアから抜け出したい人","ex":"","note":""},{"ru":"Порох в пороховнице есть","ja":"псть еще сила","ex":"","note":""},{"ru":"Отвращение","ja":"不快感","ex":"","note":""},{"ru":"Мерзкий","ja":"不快な","ex":"","note":""},{"ru":"Однохуйственно","ja":"одной тоже","ex":"","note":""},{"ru":"Протяжение","ja":"長さ","ex":"","note":""},{"ru":"На протяжение","ja":"の間","ex":"","note":""},{"ru":"Позвоночник","ja":"脊柱","ex":"","note":""},{"ru":"Свинофикация","ja":"ожирение","ex":"","note":""},{"ru":"Милипиздрический","ja":"маленький","ex":"","note":""},{"ru":"На вшивость","ja":"シラミ感染、不潔な様","ex":"","note":""},{"ru":"Мариновать","ja":"あえて引き留める、遅らせる。","ex":"","note":""},{"ru":"Насыщать/насытить","ja":"対を造でお腹いっぱい食べさせる。いっぱいに満たす。十分に補給する。","ex":"","note":""},{"ru":"Затуп","ja":"тупая ситуация","ex":"","note":""},{"ru":"Загружать/загрузить","ja":"ロードする、荷を積む、たくさんの仕事を課す","ex":"","note":""},{"ru":"Питомец","ja":"домашнее животное","ex":"","note":""},{"ru":"Расползаться/расползтись","ja":"古くなって剥がれ落ちる","ex":"","note":""},{"ru":"Обливаться/облиться","ja":"造を浴びる、うっかり自分にこぼす。汗涙血で濡れる、塗れる。ある感情に襲われる。","ex":"","note":""},{"ru":"Мотаться","ja":"ほっつき歩く、仕事で転々とする","ex":"","note":""},{"ru":"Гадость","ja":"затуп","ex":"","note":""},{"ru":"Пятихатка","ja":"5 сотка рублей","ex":"","note":""},{"ru":"Подкаблучник","ja":"妻の尻に敷かれてる夫","ex":"","note":""},{"ru":"Лимон","ja":"миллион","ex":"","note":""},{"ru":"Зацикливаться","ja":"заморачиваться","ex":"","note":""},{"ru":"Хуй с горы","ja":"сомнительный человек","ex":"","note":""},{"ru":"Совпадать/совпасть 同時に起こる","ja":"同時に起こる、一致する","ex":"","note":""},{"ru":"Преодоление","ja":"克服","ex":"","note":""},{"ru":"Беспрецедентный","ja":"前代未聞の","ex":"","note":""},{"ru":"Применять/применить","ja":"к 与に応用する","ex":"","note":""},{"ru":"Одобрять/одобрить","ja":"認める、称賛する","ex":"","note":""},{"ru":"Верхние пупки","ja":"деревни","ex":"","note":""},{"ru":"Отфутболить","ja":"отстранить","ex":"","note":""},{"ru":"Опушенный","ja":"униженный","ex":"","note":""},{"ru":"Опускать/отпустить","ja":"унижать/унизить","ex":"","note":""},{"ru":"Хищный","ja":"肉食な、獰猛な","ex":"","note":""},{"ru":"Блядки","ja":"浮気、遊びの性的関係（俗語・かなり下品）","ex":"","note":""},{"ru":"Мотыляться","ja":"раскачиваться","ex":"","note":""},{"ru":"Сидим на жопе ровно","ja":"ждать, не делая поспешных выводов и действий","ex":"","note":""},{"ru":"Шлюходствоввать","ja":"ходить по разным шлюхам","ex":"","note":""},{"ru":"Амбал","ja":"ガチムチ","ex":"","note":""},{"ru":"Трушный","ja":"настоящий","ex":"","note":""},{"ru":"Вот те бабака","ja":"нифига себе","ex":"","note":""},{"ru":"Отходняк","ja":"二日酔い","ex":"","note":""},{"ru":"Распутный","ja":"みだらな、ふしだらな","ex":"","note":""},{"ru":"Бич","ja":"бывший интеллигентный человек-бомж","ex":"","note":""},{"ru":"Обойтись без чего","ja":"то -生なしで済ませる、過ごす","ex":"","note":""},{"ru":"Спиритизм","ja":"降霊術","ex":"","note":""},{"ru":"Смутный","ja":"混乱の、落ち着かない","ex":"","note":""},{"ru":"Крысятыничество","ja":"подлый","ex":"","note":""},{"ru":"Осваивать/освойть","ja":"習得する、開拓する","ex":"","note":""},{"ru":"Осваиваться/освойться","ja":"慣れる、習得するс造","ex":"","note":""},{"ru":"Влечение к","ja":"кへの愛着、強い欲求","ex":"","note":""},{"ru":"Поклонник","ja":"фанат","ex":"","note":""},{"ru":"Четвертование","ja":"казнь такой","ex":"","note":""},{"ru":"Бухич","ja":"бухание","ex":"","note":""},{"ru":"Хуй пойми что","ja":"то - неизвестно, непонятно","ex":"","note":""},{"ru":"Губернатор","ja":"知事","ex":"","note":""},{"ru":"Облегчение","ja":"軽減、緩和、安堵","ex":"","note":""},{"ru":"Беспонтовый","ja":"つまらない、とるにたらない","ex":"","note":""},{"ru":"Под шумок","ja":"こっそりと","ex":"","note":""},{"ru":"Визуально","ja":"見た感じ","ex":"","note":""},{"ru":"Федеральный розыск","ja":"指名手配犯","ex":"","note":""},{"ru":"Попасть в зависимость","ja":"依存状態になる、依存症になる","ex":"","note":""},{"ru":"Подчинение 服従","ja":"服従、従属","ex":"","note":""},{"ru":"Бой","ja":"баба-строгая, жесткая, властная женщина русская","ex":"","note":""},{"ru":"Распиздяй","ja":"だらしのないやつ、無責任なやつ","ex":"","note":""},{"ru":"Бабник","ja":"プレイボーイ","ex":"","note":""},{"ru":"Тюлениться","ja":"пинать хуй","ex":"","note":""},{"ru":"Черномазый","ja":"薄汚い、浅黒い","ex":"","note":""},{"ru":"Протягивать/ протянуть","ja":"差し伸ばす、差し伸べる","ex":"","note":""},{"ru":"Воображаемый","ja":"想像上の","ex":"","note":""},{"ru":"Поручение","ja":"委任、依頼、課題","ex":"","note":""},{"ru":"Заслуга","ja":"достижение","ex":"","note":""},{"ru":"Плодотворный","ja":"生産的な、有益な、植物のよく育つ","ex":"","note":""},{"ru":"Овер дохуя","ja":"оч много","ex":"","note":""},{"ru":"по уши в дерьме","ja":"оч плохая ситуация","ex":"","note":""},{"ru":"Проклинать/проклясть","ja":"呪う","ex":"","note":""},{"ru":"Плесневеть/заплесневеть","ja":"カビが生える","ex":"","note":""},{"ru":"Зассыха","ja":"けち、しみったれ（俗語）","ex":"","note":""},{"ru":"Схованка","ja":"тайник","ex":"","note":""},{"ru":"Заначка","ja":"схованка с деньгами","ex":"","note":""},{"ru":"Изгнание","ja":"亡命、流刑","ex":"","note":""},{"ru":"Чпокаться","ja":"ебаться","ex":"","note":""},{"ru":"Разрыв","ja":"差","ex":"","note":""},{"ru":"Кони двинуть/Склеить ласты/Откинуться","ja":"умереть, сдохнуть","ex":"","note":""},{"ru":"Ляпота","ja":"красота","ex":"","note":""},{"ru":"Вдоль 与/生","ja":"与、生に沿って","ex":"","note":""},{"ru":"Каком кверху","ja":"ответ на «как?» когда не знаешь как ответить","ex":"","note":""},{"ru":"Подлокотник","ja":"肘掛け","ex":"","note":""},{"ru":"Подлизываться/подлизаться к кому","ja":"おべっかをいう","ex":"","note":""},{"ru":"Отвалить кому","ja":"то -〜のもとからなくなる","ex":"","note":""},{"ru":"Пережиток союза","ja":"ソ連時代の遺産","ex":"","note":""},{"ru":"Велиеолепный","ja":"оптимальный","ex":"","note":""},{"ru":"Альтушка","ja":"молодая красивая нефорша","ex":"","note":""},{"ru":"Под прикрытием","ja":"潜入調査中","ex":"","note":""},{"ru":"Накрыть поляну","ja":"накрыть стол праздничный","ex":"","note":""},{"ru":"щурить/сощурить","ja":"細める","ex":"","note":""},{"ru":"Тыры","ja":"пыры в жопе дыры -なんやかんやごちゃごちゃ（言って）","ex":"","note":""},{"ru":"Каком кверху","ja":"「どうやって？」と聞かれて答えが分からない時の冗談めいた返答","ex":"","note":""},{"ru":"Дубасить/отдубасить","ja":"ぶиん殴る、по/в 強く叩く","ex":"","note":""},{"ru":"Неубедительный","ja":"説得力のない","ex":"","note":""},{"ru":"Подловить","ja":"見抜く","ex":"","note":""},{"ru":"Почапать","ja":"出かける","ex":"","note":""},{"ru":"Побесятся и успокоятся","ja":"怒ってもすぐにおさまる","ex":"","note":""},{"ru":"Впаривать","ja":"рекламировать","ex":"","note":""},{"ru":"Приобретенный","ja":"後天的な","ex":"","note":""},{"ru":"Врожденный","ja":"先天的な","ex":"","note":""},{"ru":"Прогноз погоды","ja":"天気予報","ex":"","note":""},{"ru":"Каяться/покаяться","ja":"後悔する、кому/перед","ex":"","note":""},{"ru":"кемに罪を白状する","ja":"（кому/перед кем）〜に罪を白状する","ex":"","note":""},{"ru":"Содержаться","ja":"保たれていてる、収容されている。в前の中に含まれている、含有されている","ex":"","note":""},{"ru":"Брутальный","ja":"зверь, слон","ex":"","note":""},{"ru":"Извращать/извратить","ja":"歪んで理解する、曲解する","ex":"","note":""},{"ru":"Есть, не переесть","ja":"дохуя еды","ex":"","note":""},{"ru":"По чем","ja":"сколько стоит","ex":"","note":""},{"ru":"Завис","ja":"フリーズ","ex":"","note":""},{"ru":"Карманник","ja":"щипач","ex":"","note":""},{"ru":"Маразм","ja":"認知症","ex":"","note":""},{"ru":"Хрючево","ja":"еда","ex":"","note":""},{"ru":"Уминать/умять","ja":"хавать/схавать, жрать/сожрать","ex":"","note":""},{"ru":"Драндулет","ja":"транспорт с плохом","ex":"","note":""},{"ru":"состоянием","ja":"状態、状態によって","ex":"","note":""},{"ru":"Профилактика 予防","ja":"予防","ex":"","note":""},{"ru":"Капуша","ja":"тот кто оч медленно собирается","ex":"","note":""},{"ru":"Изысканный","ja":"утонченный","ex":"","note":""},{"ru":"Предвзятый","ja":"先入観にとらわれた","ex":"","note":""},{"ru":"Не пришей к пизде рукав","ja":"что-то неподходящее","ex":"","note":""},{"ru":"Ни пришей, ни пристегни","ja":"どっちつかずで役に立たない、場違いな","ex":"","note":""},{"ru":"Как на корове седло","ja":"ひどく似合わない、場違いな","ex":"","note":""},{"ru":"Чилипиздрик","ja":"маленький что- угодно","ex":"","note":""},{"ru":"Диктатор","ja":"独裁者","ex":"","note":""},{"ru":"Чаевничать","ja":"чаепитие устраивать","ex":"","note":""},{"ru":"Плюшки с неба падают","ja":"не прикладывать усилие, чтоб получать выгоду","ex":"","note":""},{"ru":"Усилие","ja":"努力","ex":"","note":""},{"ru":"Целеустремленный","ja":"野心家","ex":"","note":""},{"ru":"Вписываться/Вписаться в что","ja":"то","ex":"","note":""},{"ru":"","ja":"подходить, участвовать в чем-то","ex":"","note":""},{"ru":"Шизофрения","ja":"галлюцинация, шизовое поведение","ex":"","note":""},{"ru":"Навредить","ja":"вредить","ex":"","note":""},{"ru":"Захуярить","ja":"уничтожать","ex":"","note":""},{"ru":"Балласт","ja":"足を引っ張るもの","ex":"","note":""},{"ru":"Замятыш","ja":"недвупленыш","ex":"","note":""},{"ru":"Снюс","ja":"噛みタバコ","ex":"","note":""},{"ru":"Прогибаться/прогнуться под кого","ja":"то -の言いなりになる","ex":"","note":""},{"ru":"Взломать","ja":"こじ開ける、ハッキングする","ex":"","note":""},{"ru":"Пикап","ja":"ナンパ","ex":"","note":""},{"ru":"Гарем","ja":"一夫多妻の妻たち、ハーレム","ex":"","note":""},{"ru":"Вседозволенность","ja":"やりたい放題","ex":"","note":""},{"ru":"Враждебно","ja":"敵意のある","ex":"","note":""},{"ru":"Токсик","ja":"враждебная","ex":"","note":""},{"ru":"Отчасти","ja":"部分的に","ex":"","note":""},{"ru":"Намеренно","ja":"специально, умышленно","ex":"","note":""},{"ru":"Придираться/придраться к кому","ja":"то -доебывать кого-то/ доебываться до кого-то","ex":"","note":""},{"ru":"Пикапит","ja":"ナンパ師","ex":"","note":""},{"ru":"Домогаться кого","ja":"то - しつこくナンパする","ex":"","note":""},{"ru":"Приставать к кому","ja":"то -しつこくつきまとう","ex":"","note":""},{"ru":"Наведаться к кому","ja":"то-к のところに問い合わせに訪れる","ex":"","note":""},{"ru":"Тыкнуть","ja":"нажать кнопку","ex":"","note":""},{"ru":"Единомышленник","ja":"соратник","ex":"","note":""},{"ru":"Беспрекословно","ja":"異議を唱えずに","ex":"","note":""},{"ru":"Дурка","ja":"精神科病院","ex":"","note":""},{"ru":"Замкнутый","ja":"закрытый человек","ex":"","note":""},{"ru":"Мнимый","ja":"想像上の、嘘の","ex":"","note":""},{"ru":"Безрассудный","ja":"антоним рассудительный","ex":"","note":""},{"ru":"Содержанка","ja":"一切金を出さない彼女","ex":"","note":""},{"ru":"Альфонс","ja":"ヒモ男","ex":"","note":""},{"ru":"Бодрячок","ja":"жеребец","ex":"","note":""},{"ru":"Пройтись","ja":"少し散歩する","ex":"","note":""},{"ru":"Осведомленность","ja":"教養があること、そのことについて情報を把握してる状態","ex":"","note":""},{"ru":"Осведомленный","ja":"情報通の、教養のある","ex":"","note":""},{"ru":"Страпон","ja":"ペニスバンド","ex":"","note":""},{"ru":"На месте не сидится","ja":"じっとしてられない人","ex":"","note":""},{"ru":"Шило в попе","ja":"落ち着きがない、じっとしていられない","ex":"","note":""},{"ru":"Коварный","ja":"狡猾な、腹黒い","ex":"","note":""},{"ru":"Протираться/протереться","ja":"擦り切れる","ex":"","note":""},{"ru":"Мощь","ja":"сила","ex":"","note":""},{"ru":"Возненавидеть","ja":"が嫌いになる","ex":"","note":""},{"ru":"Сочетаться","ja":"マッチする","ex":"","note":""},{"ru":"Внеплановый","ja":"計画外の","ex":"","note":""},{"ru":"Помассировать","ja":"делать массаж","ex":"","note":""},{"ru":"Унижать/унизить","ja":"гнобить/","ex":"","note":""},{"ru":"Дисциплина","ja":"規律、習慣","ex":"","note":""},{"ru":"Выматывать","ja":"утомлять","ex":"","note":""},{"ru":"Совпадение","ja":"одновременно","ex":"","note":""},{"ru":"Пузо чесать","ja":"отдыхать дома, чиллить","ex":"","note":""},{"ru":"Условность","ja":"しきたり、習慣","ex":"","note":""},{"ru":"Изображение","ja":"造形、イメージ","ex":"","note":""},{"ru":"Закинуться чем","ja":"то - ちょっと食べるопрокидывать/ опрокинуть- ひっくり返す、飲み干す, обманывать","ex":"","note":""},{"ru":"Обоссаться кипятком","ja":"потекут в трусы","ex":"","note":""},{"ru":"Шебушать","ja":"шуметь легонечко","ex":"","note":""},{"ru":"Инцест","ja":"近親相姦","ex":"","note":""},{"ru":"Опрокидываться/опрокинуться","ja":"ひっくりかえる","ex":"","note":""},{"ru":"Блатной","ja":"犯罪の、かっこいい、ギャングっぽい","ex":"","note":""},{"ru":"Фраел","ja":"Антонин блатной","ex":"","note":""},{"ru":"Мусорок","ja":"полицейский","ex":"","note":""},{"ru":"Казенный дом","ja":"государственный дом","ex":"","note":""},{"ru":"Босяк","ja":"浮浪者","ex":"","note":""},{"ru":"Руина","ja":"廃墟、がれき","ex":"","note":""},{"ru":"Принять кого","ja":"то-警察に捕まる","ex":"","note":""},{"ru":"Неизбежно","ja":"必然的に","ex":"","note":""},{"ru":"Мерконтильный","ja":"お金にがめつい","ex":"","note":""},{"ru":"Патриархат","ja":"мировоззрение в котором мужчина главнее чем женщина","ex":"","note":""},{"ru":"Микро селебрити","ja":"ちょっと有名人","ex":"","note":""},{"ru":"Дичь","ja":"ерунда","ex":"","note":""},{"ru":"Безграмотный/неграмотный","ja":"読み書きのできない","ex":"","note":""},{"ru":"Позависать","ja":"проводить время","ex":"","note":""},{"ru":"Шуршать/пршуршаит","ja":"делать/сделать","ex":"","note":""},{"ru":"На грани","ja":"приемлемый максимум","ex":"","note":""},{"ru":"Мяться","ja":"しわになる、押しつぶされる","ex":"","note":""},{"ru":"Сексуальное домогательство","ja":"セクハラ、痴漢","ex":"","note":""},{"ru":"Раскваситься","ja":"устать","ex":"","note":""},{"ru":"За милую душу","ja":"с удовольствием","ex":"","note":""},{"ru":"Изжога","ja":"胸焼け","ex":"","note":""},{"ru":"Зассыха","ja":"обоссался","ex":"","note":""},{"ru":"Запариться","ja":"постараться","ex":"","note":""},{"ru":"Хитрая жопа","ja":"ずる賢い奴、悪知恵の働く奴（俗語・かなり下品）","ex":"","note":""},{"ru":"Душный/занудный","ja":"うんざりする","ex":"","note":""},{"ru":"Съесть в","ja":"（文脈不明）","ex":"","note":""},{"ru":"одно лицо","ja":"можно съесть одному","ex":"","note":""},{"ru":"гидроцефалия","ja":"水頭症","ex":"","note":""},{"ru":"Уцелеть","ja":"完　生き残る","ex":"","note":""},{"ru":"Смущать/смутить","ja":"困らせる","ex":"","note":""},{"ru":"Доесть","ja":"украсть шутку","ex":"","note":""},{"ru":"До пары до времени","ja":"до какого-то момента","ex":"","note":""},{"ru":"Проникаться/проникнуться кем","ja":"то -очень сильно влюбился в ком-то","ex":"","note":""},{"ru":"Смиряться/ смириться","ja":"сдаваться, принять","ex":"","note":""},{"ru":"Уместный","ja":"相応しい、適切な","ex":"","note":""},{"ru":"Оптимальный","ja":"лучший","ex":"","note":""},{"ru":"Переодически","ja":"время от времени","ex":"","note":""},{"ru":"Калечить/ покалечить","ja":"人を機能障害にする","ex":"","note":""},{"ru":"Переваривать информацию","ja":"情報を整理する","ex":"","note":""},{"ru":"Купец","ja":"ビジネスマン","ex":"","note":""},{"ru":"Втирать дичь","ja":"говорить хуйню","ex":"","note":""},{"ru":"Обходительный","ja":"礼儀正しい、愛想のいい","ex":"","note":""},{"ru":"Соперник/соперница","ja":"конкурент","ex":"","note":""},{"ru":"Дематериализация","ja":"исчезать","ex":"","note":""},{"ru":"Материализация","ja":"появляется","ex":"","note":""},{"ru":"Разожраться","ja":"поправиться","ex":"","note":""},{"ru":"Стоицизм","ja":"禁欲主義","ex":"","note":""},{"ru":"Аскет","ja":"禁欲主義者","ex":"","note":""},{"ru":"Прогрев гоев","ja":"обмануть глупых людей","ex":"","note":""},{"ru":"Выкупать/Выкупить","ja":"понимать/понять","ex":"","note":""},{"ru":"Вестись на что","ja":"то -поверить во что-то","ex":"","note":""},{"ru":"Шароебиться","ja":"гулять","ex":"","note":""},{"ru":"По ходу сторону","ja":"進行方向に","ex":"","note":""},{"ru":"Против хода сторону","ja":"進行方向と逆方向に","ex":"","note":""},{"ru":"Кесарево сечение","ja":"帝王切開","ex":"","note":""},{"ru":"Само собой разумеющийся","ja":"当然のこと","ex":"","note":""},{"ru":"Продался пиндосам","ja":"アメリカに寝返った","ex":"","note":""},{"ru":"Разношерстный","ja":"寄せ集めの、雑多な","ex":"","note":""},{"ru":"Задрот","ja":"ブス","ex":"","note":""},{"ru":"Пялиться на кого","ja":"то -смотреть на кого-то","ex":"","note":""},{"ru":"Бульба","ja":"картошка","ex":"","note":""},{"ru":"Цибуля","ja":"лук","ex":"","note":""},{"ru":"Кремировать","ja":"火葬する","ex":"","note":""},{"ru":"Шарашкина контора","ja":"наебалова","ex":"","note":""},{"ru":"Пускать пыль в глаза","ja":"врать, антоним прибедняться","ex":"","note":""},{"ru":"Шлюхоход","ja":"風俗好きの人","ex":"","note":""},{"ru":"В горошек","ja":"斑点模様","ex":"","note":""},{"ru":"Невдупленыш","ja":"глупенький","ex":"","note":""},{"ru":"Залупоглазка","ja":"デメ金","ex":"","note":""},{"ru":"Перлюстрация","ja":"郵便検閲","ex":"","note":""},{"ru":"В ногах правды нет","ja":"лучше не надо разговаривать о серьезной теме в ногах.","ex":"","note":""},{"ru":"Поддавать","ja":"八百長する","ex":"","note":""},{"ru":"Расслабон","ja":"расслабиться の名詞","ex":"","note":""},{"ru":"Тюремный жаргон","ja":"刑務所での隠語","ex":"","note":""},{"ru":"Мусор","ja":"полицейский, полицай","ex":"","note":""},{"ru":"Мотаю на ус","ja":"буду знать","ex":"","note":""},{"ru":"Шпана","ja":"шиз школьник","ex":"","note":""},{"ru":"Закатать губу","ja":"поумерить пыл","ex":"","note":""},{"ru":"Губозакатывающая машина","ja":"прикол, шутка","ex":"","note":""},{"ru":"Выравнивать/Выровнять","ja":"平にならす","ex":"","note":""},{"ru":"Забить хуй на что","ja":"то- не выполнить","ex":"","note":""},{"ru":"Не пришей к пизде рукав","ja":"неподходящий","ex":"","note":""},{"ru":"Неуживчивый","ja":"人付き合いの悪い","ex":"","note":""},{"ru":"Дрыщ","ja":"оч худой человек","ex":"","note":""},{"ru":"Изобретение","ja":"то что изобретают","ex":"","note":""},{"ru":"Столпотворение","ja":"大騒動、カオス","ex":"","note":""},{"ru":"Тройничок","ja":"3P","ex":"","note":""},{"ru":"Привередливый","ja":"気まぐれな、気難しい","ex":"","note":""},{"ru":"предоплата","ja":"前払い","ex":"","note":""},{"ru":"Нельзя под один гребень всех чесать (всех под одну гребенку)","ja":"人を一括りにしてはいけない、十把一絡げにしてはいけない","ex":"","note":""},{"ru":"Мельком","ja":"ちらりと","ex":"","note":""},{"ru":"Сарафанное радио","ja":"когда друг с другом делится чем-то","ex":"","note":""},{"ru":"Увядший","ja":"しおれた","ex":"","note":""},{"ru":"Совмещать/совместить","ja":"対とс 造を両立する","ex":"","note":""},{"ru":"Юриспруденция","ja":"法学","ex":"","note":""},{"ru":"Не стенка подвинется","ja":"「壁じゃないんだから動かせる」＝融通が利く、場所は変えられるという冗談めいた表現","ex":"","note":""},{"ru":"Подвеска","ja":"非金属のネックレス","ex":"","note":""},{"ru":"Альча","ja":"ягода","ex":"","note":""},{"ru":"Чай дохлебываем, и уебываем","ja":"お茶を飲み終えたら、とっとと帰る（下品な言い方）","ex":"","note":""},{"ru":"Ебатория","ja":"конченное событие","ex":"","note":""},{"ru":"Скользить по поверхности 生","ja":"うわべだけみる","ex":"","note":""},{"ru":"Завайвить","ja":"雰囲気を感じ、正しく理解する","ex":"","note":""},{"ru":"Объебос","ja":"休みすぎて使い物にならない物","ex":"","note":""},{"ru":"Обожествлять/обожествить","ja":"神と崇拝する","ex":"","note":""},{"ru":"Засекать/засечь","ja":"記入、記録する（時間など）","ex":"","note":""},{"ru":"Жопиться","ja":"вредничать","ex":"","note":""},{"ru":"Суки высокомерные","ja":"高慢なクソ女ども（俗語・かなり下品）","ex":"","note":""},{"ru":"Каламбур","ja":"だじゃれ","ex":"","note":""},{"ru":"Царапать/царапнуть","ja":"ひっかく","ex":"","note":""},{"ru":"Шмот","ja":"одежда","ex":"","note":""},{"ru":"Шмонать/Обшманали мя","ja":"досмотр заебал меня","ex":"","note":""},{"ru":"Обшманать","ja":"заебать ебанным досмотром","ex":"","note":""},{"ru":"Спф","ja":"крем от солнца","ex":"","note":""},{"ru":"Аутичный","ja":"вялый, глупый, простой","ex":"","note":""},{"ru":"Амебный","ja":"вялый","ex":"","note":""},{"ru":"Наждачка やすり","ja":"紙やすり、サンドペーパー","ex":"","note":""},{"ru":"Полномочия","ja":"власть","ex":"","note":""},{"ru":"Утонченный 洗練された","ja":"洗練された、上品な","ex":"","note":""},{"ru":"Шмыгать носом","ja":"鼻をすする","ex":"","note":""},{"ru":"Высморкаться","ja":"鼻をかむ","ex":"","note":""},{"ru":"Потрепанный","ja":"やつれた、ボロボロな","ex":"","note":""},{"ru":"Пропитывать","ja":"пропитать 対に造を染み込ませる","ex":"","note":""},{"ru":"Впитывать","ja":"Впитать 水分を吸収する","ex":"","note":""},{"ru":"Отстраняться/Отстраниться","ja":"避ける","ex":"","note":""},{"ru":"Шиз","ja":"нефор, фрик","ex":"","note":""},{"ru":"Шизовый/ шизанутый","ja":"странный","ex":"","note":""},{"ru":"Скуф","ja":"я","ex":"","note":""},{"ru":"Скуфиня","ja":"Анастасия Владимировна","ex":"","note":""},{"ru":"Комфортик","ja":"гриша","ex":"","note":""},{"ru":"Плесень","ja":"русская бабка ебанная","ex":"","note":""},{"ru":"Мне не зашло/не вкатило","ja":"мне не понравилось","ex":"","note":""},{"ru":"Дать по шарам","ja":"опьянеть, ударить по яйцам","ex":"","note":""},{"ru":"Нахуя, а главное зачем","ja":"何のために？ というか、そもそもなぜ？（かなり下品）","ex":"","note":""},{"ru":"Раскумарить кальян","ja":"水タバコ（シーシャ）を吸って気分を高揚させる／一服する（俗語）","ex":"","note":""},{"ru":"ЗОЖ","ja":"здоровый образ жизни","ex":"","note":""},{"ru":"дать по шарам","ja":"酔う、または金玉を殴る（俗語）","ex":"","note":""},{"ru":"В холодильнике мышь повесилась","ja":"冷蔵庫が空っぽだ、食べ物が何もない","ex":"","note":""},{"ru":"Зазнаваться,Зазнаться","ja":"自惚れる","ex":"","note":""},{"ru":"Сесть на уши","ja":"подслушивать- уши греешь","ex":"","note":""},{"ru":"Ссать в уши","ja":"пиздеть","ex":"","note":""},{"ru":"Прибедняться","ja":"приуменьшать свои статус, свои деньги","ex":"","note":""},{"ru":"Взбалмошный","ja":"分別のない、落ち着きのない","ex":"","note":""},{"ru":"Зажрался","ja":"иметь слишком высокие требования","ex":"","note":""},{"ru":"Перебирать харчами","ja":"食べ物にうるさい、好き嫌いが多い","ex":"","note":""},{"ru":"Двуличный","ja":"二面性を持つ","ex":"","note":""},{"ru":"Лицемерный","ja":"偽善的な、二面性のある","ex":"","note":""},{"ru":"Умеренно сказочно","ja":"хорошо, но не настолько.","ex":"","note":""},{"ru":"Заложник","ja":"人質","ex":"","note":""},{"ru":"Зажопинск, Мухосранск, Ебеня","ja":"любой город в России кроме мск и спб","ex":"","note":""},{"ru":"Взбодриться","ja":"元気づく　взбодрись","ex":"","note":""},{"ru":"Ловушка джокера","ja":"подстава","ex":"","note":""}];
+if(!words || !words.length){
+  words=importedWords;
+} else {
+  const existing=new Set(words.map(w=>w.ru));
+  importedWords.forEach(w=>{if(!existing.has(w.ru)){words.push(w);existing.add(w.ru);}});
+  localStorage.setItem(KEY,JSON.stringify(words));
+}
+let stats=JSON.parse(localStorage.getItem(STAT)||'{"right":0,"total":0}');
+let current=null,locked=false;
+const $=id=>document.getElementById(id);
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function save(){localStorage.setItem(KEY,JSON.stringify(words));localStorage.setItem(STAT,JSON.stringify(stats));update()}
+function update(){$("count").textContent=words.length;$("rate").textContent=stats.total?Math.round(stats.right/stats.total*100)+"%":"—"}
+function shuffle(a){return [...a].sort(()=>Math.random()-.5)}
+function quiz(){
+locked=false;$("feedback").classList.add("hidden");$("next").classList.add("hidden");
+if(!words.length){$("quizContent").classList.add("hidden");$("emptyQuiz").classList.remove("hidden");return}
+$("quizContent").classList.remove("hidden");$("emptyQuiz").classList.add("hidden");
+current=words[Math.floor(Math.random()*words.length)];$("qword").textContent=current.ru;
+let opts=shuffle([current.ja,...shuffle(words.filter(w=>w!==current)).slice(0,3).map(w=>w.ja)]);
+const fillers=["理解する","決める","避ける","見つける","忘れる","覚えている"].filter(x=>!opts.includes(x));
+while(opts.length<4)opts.push(fillers.shift());
+opts=shuffle(opts.slice(0,4));$("choices").innerHTML="";
+opts.forEach(t=>{let b=document.createElement("button");b.className="btn choice";b.textContent=t;b.onclick=()=>answer(b,t);$("choices").appendChild(b)});
+$("num").textContent=(stats.total+1)+"問目";
+}
+
+async function sendQuizNotification(){
+  const status=$("notifyStatus");
+  if(!("Notification" in window)){
+    status.textContent="このiPhone/ブラウザでは通知に対応していません。";
+    return;
+  }
+  try{
+    let perm=Notification.permission;
+    if(perm==="default") perm=await Notification.requestPermission();
+    if(perm!=="granted"){
+      status.textContent="通知が許可されていません。iPhoneの設定で「露単語クイズ」の通知を許可してください。";
+      return;
+    }
+    if(!words.length){
+      status.textContent="単語を1つ以上登録してね。";
+      return;
+    }
+    const q=words[Math.floor(Math.random()*words.length)];
+    const opts=shuffle([q.ja,...shuffle(words.filter(w=>w!==q)).slice(0,2).map(w=>w.ja),
+      "理解する","決める","避ける","見つける"].filter((x,i,a)=>a.indexOf(x)===i)).slice(0,3);
+    while(opts.length<3) opts.push(["忘れる","覚えている","必ず"][opts.length-1]);
+    const text=`意味は？ ① ${opts[0]}　② ${opts[1]}　③ ${opts[2]}`;
+    const n=new Notification("🇷🇺 露単語クイズ：今日の1問",{body:`${q.ru}\n${text}`,tag:"ru-quiz-one",renotify:true});
+    n.onclick=()=>{window.focus();n.close();};
+    status.textContent="通知を送りました！ロック画面／通知センターから確認できます。";
+  }catch(e){
+    status.textContent="通知を送れませんでした。ホーム画面の「露単語クイズ」からもう一度試してね。";
+  }
+}
+
+function escapeHtml(s){
+  return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+}
+function startEdit(id){
+  const w=words.find(x=>String(x.id)===String(id));
+  if(!w)return;
+  const area=$("editArea");
+  area.classList.remove("hidden");
+  area.innerHTML=`
+    <h3>単語を編集</h3>
+    <label>ロシア語<input id="editRu" value="${escapeHtml(w.ru)}"></label>
+    <label>日本語の意味<input id="editJa" value="${escapeHtml(w.ja)}"></label>
+    <label>例文<input id="editExample" value="${escapeHtml(w.example||"")}"></label>
+    <label>メモ<input id="editNote" value="${escapeHtml(w.note||"")}"></label>
+    <div class="row">
+      <button class="btn" id="saveEdit">保存</button>
+      <button class="btn secondary" id="cancelEdit">キャンセル</button>
+    </div>`;
+  $("saveEdit").onclick=()=>{
+    w.ru=$("editRu").value.trim();
+    w.ja=$("editJa").value.trim()||"意味未登録";
+    w.example=$("editExample").value.trim();
+    w.note=$("editNote").value.trim();
+    saveWords(); renderWords(); area.classList.add("hidden"); area.innerHTML="";
+  };
+  $("cancelEdit").onclick=()=>{area.classList.add("hidden");area.innerHTML="";};
+}
+function deleteWord(id){
+  const w=words.find(x=>String(x.id)===String(id));
+  if(!w)return;
+  if(!confirm(`「${w.ru}」を削除しますか？`))return;
+  words=words.filter(x=>String(x.id)!==String(id));
+  saveWords(); renderWords();
+}
+function answer(btn,text){if(locked)return;locked=true;const ok=text===current.ja;stats.total++;if(ok)stats.right++;
+document.querySelectorAll("#choices .choice").forEach(b=>{if(b.textContent===current.ja)b.classList.add("ok");else if(b===btn)b.classList.add("no")});
+$("feedback").innerHTML=(ok?"✓ 正解！":"✕ 正解は「"+esc(current.ja)+"」")+(current.ex?'<div class="muted" style="margin-top:8px">例文：'+esc(current.ex)+'</div>':'')+(current.note?'<div class="muted">メモ：'+esc(current.note)+'</div>':'');
+$("feedback").classList.remove("hidden");$("next").classList.remove("hidden");save()}
+$("next").onclick=quiz;
+function tab(name){document.querySelectorAll(".page").forEach(p=>p.classList.toggle("hidden",p.id!==name));document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("active",b.dataset.tab===name));if(name==="quiz")quiz();if(name==="list")render()}
+document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>tab(b.dataset.tab));
+$("notifyBtn").onclick=sendQuizNotification;
+$("save").onclick=()=>{let ru=$("ru").value.trim(),ja=$("ja").value.trim();if(!ru||!ja){$("saved").textContent="ロシア語と意味を入力してね。";return}words.push({ru,ja,ex:$("ex").value.trim(),note:$("note").value.trim()});$("ru").value=$("ja").value=$("ex").value=$("note").value="";$("saved").textContent="登録しました！";save()};
+function render(){
+  const box=$("items");
+  const q=(($("searchInput")?.value)||"").trim().toLowerCase();
+  const filtered=words.filter(w=>{
+    const hay=[w.ru,w.ja,w.ex,w.example,w.note,w.explanation].join(" ").toLowerCase();
+    return !q || hay.includes(q);
+  });
+  $("listCount").textContent=(q?filtered.length+" / ":"")+words.length+"語";
+  $("searchCount").textContent=q?`（「${q}」の検索結果）`:"";
+  box.innerHTML="";
+  if(!filtered.length){
+    box.innerHTML="<div class='empty'>該当する単語がありません。</div>";
+    return;
+  }
+  filtered.forEach(w=>{
+    const d=document.createElement("div");
+    d.className="item";
+    d.innerHTML=`<div class="row">
+      <strong>${esc(w.ru||"")}</strong>
+      <div class="word-actions">
+        <button class="btn smallbtn editWord">編集</button>
+        <button class="btn smallbtn deleteWord">削除</button>
+      </div>
+    </div>
+    <div>${esc(w.ja||"意味未登録")}</div>
+    ${(w.note?`<div class="muted">${esc(w.note)}</div>`:"")}
+    ${(w.ex?`<div class="muted">${esc(w.ex)}</div>`:"")}`;
+    d.querySelector(".editWord").onclick=()=>startEdit(w);
+    d.querySelector(".deleteWord").onclick=()=>{
+      if(confirm(`「${w.ru}」を削除しますか？`)){
+        words=words.filter(x=>x!==w);
+        save();
+        render();
+      }
+    };
+    box.appendChild(d);
+  });
+}
+function startEdit(w){
+  const area=$("editArea");
+  area.classList.remove("hidden");
+  area.innerHTML=`<h3>単語を編集</h3>
+    <label>ロシア語<input id="editRu" value="${esc(w.ru||"")}"></label>
+    <label>日本語の意味<input id="editJa" value="${esc(w.ja||"")}"></label>
+    <label>例文<input id="editEx" value="${esc(w.ex||"")}"></label>
+    <label>メモ<input id="editNote" value="${esc(w.note||"")}"></label>
+    <div class="row">
+      <button class="btn" id="saveEdit">保存</button>
+      <button class="btn secondary" id="cancelEdit">キャンセル</button>
+    </div>`;
+  $("saveEdit").onclick=()=>{
+    w.ru=$("editRu").value.trim();
+    w.ja=$("editJa").value.trim()||"意味未登録";
+    w.ex=$("editEx").value.trim();
+    w.note=$("editNote").value.trim();
+    save(); render();
+    area.classList.add("hidden"); area.innerHTML="";
+  };
+  $("cancelEdit").onclick=()=>{area.classList.add("hidden");area.innerHTML="";};
+}
+
+$("searchInput")?.addEventListener("input",render);
+$("clearSearchBtn")?.addEventListener("click",()=>{ $("searchInput").value=""; render(); });
+update();quiz();
+})();
+
+</script>
+</body>
+</html>
