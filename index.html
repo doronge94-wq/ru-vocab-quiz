@@ -13,6 +13,17 @@
 nav{display:flex;gap:8px;margin-bottom:12px;overflow:auto}nav button,.btn{border:1px solid #ddd;background:#fff;border-radius:12px;padding:11px 14px;font-weight:700;font-size:15px;min-height:44px}nav button.active,.primary{background:#171717;color:white;border-color:#171717}
 .card{background:#fff;border:1px solid #ddd;border-radius:22px;padding:22px}.muted{color:#777;font-size:13px}.word{font-size:clamp(38px,10vw,64px);font-weight:850;margin:25px 0 4px;word-break:break-word}.meaning{font-size:21px}.choices{display:grid;gap:9px;margin-top:20px}.choice{text-align:left;width:100%;min-height:52px}.choice.ok{background:#e7f6eb;border-color:#72b982}.choice.no{background:#fbe9e9;border-color:#d98989}.feedback{margin-top:15px;padding:14px;border-radius:14px;background:#f5f5f7;line-height:1.55}.hidden{display:none!important}
 label{display:block;font-size:13px;color:#777;margin:14px 0 6px}input,textarea{width:100%;border:1px solid #ccc;border-radius:12px;padding:12px;font-size:16px;background:#fff}textarea{min-height:90px}.full{width:100%;margin-top:16px}.item{padding:14px 0;border-bottom:1px solid #eee}.row{display:flex;justify-content:space-between;gap:10px;align-items:center}.smallbtn{min-height:40px!important;padding:8px 11px!important;font-size:13px!important}.empty{padding:25px 0;text-align:center;color:#777}
+
+.list-tools{display:flex;gap:8px;margin:12px 0;align-items:center}
+.list-tools input{flex:1}
+.word-row{display:flex;justify-content:space-between;gap:10px;padding:12px 0;border-bottom:1px solid #333}
+.word-main{min-width:0}
+.word-actions{display:flex;gap:6px;align-items:center;flex-shrink:0}
+.edit-area{padding:12px;margin:10px 0;border:1px solid #555;border-radius:12px}
+.edit-area label{display:block;margin:8px 0}
+.edit-area input{width:100%;box-sizing:border-box}
+.danger{border-color:#a33}
+.hidden{display:none!important}
 </style>
 </head>
 <body>
@@ -37,7 +48,12 @@ label{display:block;font-size:13px;color:#777;margin:14px 0 6px}input,textarea{w
 </section>
 
 <section class="card page hidden" id="list">
-<div class="row"><h2>単語一覧</h2><span class="muted" id="listCount"></span></div>
+<div class="list-tools">
+  <input id="searchInput" type="search" placeholder="🔎 ロシア語・日本語で検索">
+  <button class="btn smallbtn" id="clearSearchBtn">クリア</button>
+</div>
+<div id="editArea" class="edit-area hidden"></div>
+<div class="row"><h2>単語一覧 <span id="searchCount" class="muted"></span></h2><span class="muted" id="listCount"></span></div>
 <div id="items"></div>
 </section>
 </div>
@@ -102,6 +118,41 @@ async function sendQuizNotification(){
     status.textContent="通知を送れませんでした。ホーム画面の「露単語クイズ」からもう一度試してね。";
   }
 }
+
+function escapeHtml(s){
+  return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+}
+function startEdit(id){
+  const w=words.find(x=>String(x.id)===String(id));
+  if(!w)return;
+  const area=$("editArea");
+  area.classList.remove("hidden");
+  area.innerHTML=`
+    <h3>単語を編集</h3>
+    <label>ロシア語<input id="editRu" value="${escapeHtml(w.ru)}"></label>
+    <label>日本語の意味<input id="editJa" value="${escapeHtml(w.ja)}"></label>
+    <label>例文<input id="editExample" value="${escapeHtml(w.example||"")}"></label>
+    <label>メモ<input id="editNote" value="${escapeHtml(w.note||"")}"></label>
+    <div class="row">
+      <button class="btn" id="saveEdit">保存</button>
+      <button class="btn secondary" id="cancelEdit">キャンセル</button>
+    </div>`;
+  $("saveEdit").onclick=()=>{
+    w.ru=$("editRu").value.trim();
+    w.ja=$("editJa").value.trim()||"意味未登録";
+    w.example=$("editExample").value.trim();
+    w.note=$("editNote").value.trim();
+    saveWords(); renderWords(); area.classList.add("hidden"); area.innerHTML="";
+  };
+  $("cancelEdit").onclick=()=>{area.classList.add("hidden");area.innerHTML="";};
+}
+function deleteWord(id){
+  const w=words.find(x=>String(x.id)===String(id));
+  if(!w)return;
+  if(!confirm(`「${w.ru}」を削除しますか？`))return;
+  words=words.filter(x=>String(x.id)!==String(id));
+  saveWords(); renderWords();
+}
 function answer(btn,text){if(locked)return;locked=true;const ok=text===current.ja;stats.total++;if(ok)stats.right++;
 document.querySelectorAll("#choices .choice").forEach(b=>{if(b.textContent===current.ja)b.classList.add("ok");else if(b===btn)b.classList.add("no")});
 $("feedback").innerHTML=(ok?"✓ 正解！":"✕ 正解は「"+esc(current.ja)+"」")+(current.ex?'<div class="muted" style="margin-top:8px">例文：'+esc(current.ex)+'</div>':'')+(current.note?'<div class="muted">メモ：'+esc(current.note)+'</div>':'');
@@ -114,6 +165,9 @@ $("save").onclick=()=>{let ru=$("ru").value.trim(),ja=$("ja").value.trim();if(!r
 function render(){let box=$("items");$("listCount").textContent=words.length+"語";box.innerHTML=words.length?"":"<div class='empty'>登録した単語がここに表示されます。</div>";words.forEach((w,i)=>{let d=document.createElement("div");d.className="item";d.innerHTML="<div class='row'><strong>"+esc(w.ru)+"</strong><button class='btn smallbtn'>削除</button></div><div>"+esc(w.ja)+"</div>"+(w.note?"<div class='muted'>"+esc(w.note)+"</div>":"")+(w.ex?"<div class='muted'>"+esc(w.ex)+"</div>":"");d.querySelector("button").onclick=()=>{words.splice(i,1);save();render()};box.appendChild(d)})}
 update();quiz();
 })();
+
+$("searchInput")?.addEventListener("input",renderWords);
+$("clearSearchBtn")?.addEventListener("click",()=>{ $("searchInput").value=""; renderWords(); });
 </script>
 </body>
 </html>
